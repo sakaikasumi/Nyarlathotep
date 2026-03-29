@@ -22,8 +22,8 @@
     <div id="root"></div>
     <script type="module">
         // -------------------------------------------------------------------
-        // KP 注意：请在 GitHub 部署前，先从控制台点“复制部署参数”并覆盖下面这一行！
-        const MANUALLY_CONFIG = {"firebase":{"apiKey":"AIzaSyCqyCcs2R2e7AegGjvFAwG98wlamtbHvZY","authDomain":"bard-frontend.firebaseapp.com","projectId":"bard-frontend","storageBucket":"bard-frontend.firebasestorage.app","messagingSenderId":"175205271074","appId":"1:175205271074:web:2b7bd4d34d33bf38e6ec7b"},"appId":"nyar-divine-final-v109"};
+        // 物理固化：V112 协议已锁定
+        const MANUALLY_CONFIG = {"firebase":{"apiKey":"AIzaSyCqyCcs2R2e7AegGjvFAwG98wlamtbHvZY","authDomain":"bard-frontend.firebaseapp.com","projectId":"bard-frontend","storageBucket":"bard-frontend.firebasestorage.app","messagingSenderId":"175205271074","appId":"1:175205271074:web:2b7bd4d34d33bf38e6ec7b"},"appId":"nyar-v111-fixed"};
         // -------------------------------------------------------------------
 
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -32,19 +32,14 @@
 
         window.FB = { doc, setDoc, getDoc, collection, query, onSnapshot, addDoc, where, updateDoc, signInAnonymously, onAuthStateChanged };
 
-        let finalConfig = null;
-        if (MANUALLY_CONFIG) { finalConfig = MANUALLY_CONFIG; }
-        else if (typeof __firebase_config !== 'undefined') { 
-            finalConfig = { firebase: JSON.parse(__firebase_config), appId: "nyar-divine-final-v109" }; 
-        }
-
-        if (finalConfig) {
-            const app = initializeApp(finalConfig.firebase);
+        try {
+            const app = initializeApp(MANUALLY_CONFIG.firebase);
             window.db = getFirestore(app);
             window.auth = getAuth(app);
-            window.appId = finalConfig.appId;
+            window.appId = MANUALLY_CONFIG.appId;
             window.ready = true;
-        }
+            console.log("Dimension Aligned: V112");
+        } catch(e) { console.error("Portal Error"); }
     </script>
 
     <script type="text/babel">
@@ -97,7 +92,7 @@
                         setAuthData({ user: un, did: null });
                         setView('BIND');
                     }
-                } catch (e) { setError("连接受阻，请重试。"); }
+                } catch (e) { setError("连接异常，请重试。"); }
                 setIsAction(false);
             };
 
@@ -116,7 +111,7 @@
                 const text = input; setInput(''); setIsAction(true);
                 await window.FB.addDoc(window.FB.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'whispers'), { targetId: authData.did, author: authData.user, content: text, ts: Date.now(), type: 'player' });
                 try {
-                    const prompt = `你是奈亚拉托提普。内容: "${text}". 态度傲慢。返回JSON回复 {"reply": "..."}`;
+                    const prompt = `你是奈亚拉托提普。内容: "${text}". 语气傲慢。返回JSON回复 {"reply": "..."}`;
                     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=`, {
                         method: 'POST', headers: {'Content-Type':'application/json'},
                         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json" } })
@@ -128,19 +123,19 @@
                 setIsAction(false);
             };
 
-            if (view === 'LOADING') return <div className="h-screen flex items-center justify-center bg-black font-black text-indigo-900 tracking-[1em] uppercase animate-pulse">Establishing...</div>;
+            if (view === 'LOADING') return <div className="h-screen bg-black flex items-center justify-center bg-black text-indigo-950 font-black tracking-[1em] uppercase animate-pulse italic">Establishing...</div>;
 
             return (
                 <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-[#020205] relative select-none">
                     {view === 'LOGIN' && (
                         <div className="w-full max-w-sm glass rounded-[3rem] p-12 space-y-10 animate-in zoom-in shadow-2xl">
-                            <div className="text-center italic font-black text-3xl uppercase tracking-tighter text-white">祭坛降临</div>
+                            <div className="text-center italic font-black text-3xl uppercase tracking-tighter text-white">祭坛登录</div>
                             <div className="space-y-4">
                                 <input type="text" id="un" className="w-full bg-black/40 border border-white/5 rounded-2xl px-6 py-5 text-white outline-none focus:border-indigo-500 transition-all text-base" placeholder="凡人之名" />
                                 <input type="password" id="pw" className="w-full bg-black/40 border border-white/5 rounded-2xl px-6 py-5 text-white outline-none focus:border-indigo-500 transition-all text-base" placeholder="契约密钥" />
                                 {error && <p className="text-[10px] text-rose-500 text-center font-bold uppercase">{error}</p>}
                                 <button onClick={() => handleLogin(document.getElementById('un').value, document.getElementById('pw').value)} disabled={isAction} className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black uppercase italic shadow-lg active:scale-95 transition-all">
-                                    {isAction ? "正在对齐..." : "开启祭坛"}
+                                    {isAction ? "对齐维度..." : "开启祭坛"}
                                 </button>
                             </div>
                         </div>
@@ -148,10 +143,9 @@
                     {view === 'BIND' && (
                         <div className="w-full max-w-sm glass rounded-[3rem] p-10 space-y-10 text-center text-white">
                             <h2 className="text-2xl font-black italic uppercase">身份锁定</h2>
-                            <p className="text-xs opacity-50 italic">Bind Discord Username</p>
                             <div className="space-y-4">
                                 <input type="text" id="did" className="w-full bg-black/40 border border-white/5 rounded-2xl px-6 py-5 text-white text-center font-bold tracking-widest outline-none focus:border-indigo-500" placeholder="Discord Username" />
-                                <button onClick={() => handleBind(document.getElementById('did').value)} disabled={isAction} className="w-full py-5 bg-purple-600 text-white rounded-2xl font-black uppercase shadow-lg">确认灵魂契约</button>
+                                <button onClick={() => handleBind(document.getElementById('did').value)} disabled={isAction} className="w-full py-5 bg-purple-600 text-white rounded-2xl font-black uppercase shadow-lg">确认契约</button>
                             </div>
                         </div>
                     )}
@@ -161,16 +155,16 @@
                                 <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg nyar-glow text-white italic font-black">N</div>
                                 <h1 className="text-xl font-black italic uppercase text-white leading-none">虚空真理祭坛</h1>
                             </div>
-                            <div ref={scrollRef} className="flex-1 glass rounded-[3.5rem] p-6 lg:p-10 overflow-y-auto mb-10 space-y-8 custom-scrollbar shadow-2xl">
+                            <div ref={scrollRef} className="flex-1 glass rounded-[3.5rem] p-6 lg:p-10 overflow-y-auto mb-10 space-y-8 custom-scrollbar shadow-2xl shadow-indigo-900/5">
                                 {messages.map((m, i) => (
                                     <div key={i} className={`flex flex-col gap-2 ${m.type === 'bot' ? 'items-start' : 'items-end'}`}>
                                         <div className={`px-7 py-5 rounded-[2.5rem] text-sm leading-relaxed max-w-[90%] border shadow-xl ${m.type === 'bot' ? 'bg-indigo-900/15 border-indigo-500/20 text-indigo-100 italic' : 'bg-white/5 border-white/5 text-zinc-300'}`}>{m.content}</div>
                                     </div>
                                 ))}
                             </div>
-                            <div className="relative">
+                            <div className="relative group">
                                 <input type="text" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendMessage()} className="w-full bg-white/[0.03] border border-white/10 rounded-full px-12 py-7 pr-32 outline-none focus:border-indigo-500 text-white text-base shadow-2xl transition-all" placeholder="在此低语..." />
-                                <button onClick={sendMessage} className="absolute right-4 top-3 px-10 py-4 bg-indigo-600 text-white rounded-full font-black uppercase italic text-sm active:scale-95">发送</button>
+                                <button onClick={sendMessage} className="absolute right-4 top-3 px-10 py-4 bg-indigo-600 text-white rounded-full font-black uppercase italic text-sm active:scale-95 shadow-lg">发送</button>
                             </div>
                         </div>
                     )}
