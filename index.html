@@ -10,38 +10,39 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;900&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: #020205; color: #a5b4fc; margin: 0; touch-action: manipulation; }
+        body { font-family: 'Inter', sans-serif; background-color: #020205; color: #a5b4fc; margin: 0; }
         .custom-scrollbar::-webkit-scrollbar { width: 3px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #312e81; border-radius: 10px; }
-        .glass { background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); backdrop-filter: blur(15px); }
+        .glass { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); backdrop-filter: blur(12px); }
         .nyar-glow { animation: pulse 4s infinite ease-in-out; }
-        @keyframes pulse { 0%, 100% { opacity: 0.5; transform: scale(1); } 50% { opacity: 1; transform: scale(1.02); } }
     </style>
 </head>
 <body>
     <div id="root"></div>
     <script type="module">
         // -------------------------------------------------------------------
-        // 维度同步参数 (V114 已物理对齐)
+        // KP 注意：GitHub 部署前，请从控制台点“复制部署参数”并覆盖下面这一行
         const MANUALLY_CONFIG = {"firebase":{"apiKey":"AIzaSyCqyCcs2R2e7AegGjvFAwG98wlamtbHvZY","authDomain":"bard-frontend.firebaseapp.com","projectId":"bard-frontend","storageBucket":"bard-frontend.firebasestorage.app","messagingSenderId":"175205271074","appId":"1:175205271074:web:2b7bd4d34d33bf38e6ec7b"},"appId":"nyar-v111-fixed"};
         // -------------------------------------------------------------------
 
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, query, onSnapshot, addDoc, where, updateDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, query, onSnapshot, addDoc, where, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-        // 全局调试
         window.FB = { doc, setDoc, getDoc, collection, query, onSnapshot, addDoc, where, updateDoc, signInAnonymously, onAuthStateChanged };
 
-        try {
-            const app = initializeApp(MANUALLY_CONFIG.firebase);
+        let cfg = null;
+        if (MANUALLY_CONFIG) { cfg = MANUALLY_CONFIG; }
+        else if (typeof __firebase_config !== 'undefined') { 
+            cfg = { firebase: JSON.parse(__firebase_config), appId: typeof __app_id !== 'undefined' ? __app_id : 'nyar' }; 
+        }
+
+        if (cfg) {
+            const app = initializeApp(cfg.firebase);
             window.db = getFirestore(app);
             window.auth = getAuth(app);
-            window.appId = MANUALLY_CONFIG.appId.trim(); // 自动修剪空格
-            window.isConfiged = true;
-            console.log("Abyss Aligned.");
-        } catch(e) {
-            window.initError = e.message;
+            window.appId = cfg.appId;
+            window.ready = true;
         }
     </script>
 
@@ -59,20 +60,14 @@
 
             useEffect(() => {
                 const check = setInterval(() => {
-                    if (window.isConfiged && window.auth) {
+                    if (window.ready && window.auth) {
                         clearInterval(check);
                         window.FB.onAuthStateChanged(window.auth, (u) => {
                             if (u) setView('LOGIN');
-                            else {
-                                window.FB.signInAnonymously(window.auth).catch(e => {
-                                    setError(`接入受阻 (${e.code})`);
-                                    setView('LOGIN');
-                                });
-                            }
+                            else window.FB.signInAnonymously(window.auth);
                         });
                     }
-                }, 1000);
-                return () => clearInterval(check);
+                }, 500);
             }, []);
 
             useEffect(() => {
@@ -81,15 +76,10 @@
                 return window.FB.onSnapshot(q, (s) => {
                     const msgs = []; s.forEach(d => msgs.push(d.data()));
                     setMessages(msgs.sort((a, b) => a.ts - b.ts));
-                }, (err) => {
-                    console.error("Snapshot Error:", err);
-                    setError(`同步中断 (${err.code})`);
                 });
             }, [view, authData.did]);
 
-            useEffect(() => {
-                if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-            }, [messages]);
+            useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [messages]);
 
             const handleLogin = async (un, pw) => {
                 if(!un || !pw || isAction) return;
@@ -107,93 +97,66 @@
                         setAuthData({ user: un, did: null });
                         setView('BIND');
                     }
-                } catch (e) { 
-                    setError(`连接异常 (${e.code || 'Network Error'})`); 
-                    console.error(e);
-                }
+                } catch (e) { setError("连接异常 (Permission Denied)"); }
                 setIsAction(false);
             };
 
             const handleBind = async (id) => {
                 if(!id || isAction) return;
                 setIsAction(true);
-                try {
-                    const cleaned = id.trim().toLowerCase();
-                    await window.FB.updateDoc(window.FB.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'players', authData.user), { discordId: cleaned });
-                    setAuthData(prev => ({ ...prev, did: cleaned }));
-                    setView('CHAT');
-                } catch(e) { setError(`绑定失败 (${e.code})`); }
+                await window.FB.updateDoc(window.FB.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'players', authData.user), { discordId: id.trim().toLowerCase() });
+                setAuthData(prev => ({ ...prev, did: id.trim().toLowerCase() }));
+                setView('CHAT');
                 setIsAction(false);
             };
 
             const sendMessage = async () => {
                 if (!input.trim() || isAction) return;
                 const text = input; setInput(''); setIsAction(true);
-                try {
-                    await window.FB.addDoc(window.FB.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'whispers'), { targetId: authData.did, author: authData.user, content: text, ts: Date.now(), type: 'player' });
-                    const prompt = `你是奈亚拉托提普。内容: "${text}". 语气极其傲慢嘲弄。返回JSON {"reply": "..."}`;
-                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=`, {
-                        method: 'POST', headers: {'Content-Type':'application/json'},
-                        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json" } })
-                    });
-                    const data = await res.json();
-                    const aiReply = JSON.parse(data.candidates[0].content.parts[0].text).reply;
-                    await window.FB.addDoc(window.FB.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'whispers'), { targetId: authData.did, author: "Nyarlathotep", content: aiReply, ts: Date.now(), type: 'bot' });
-                } catch (e) {}
+                await window.FB.addDoc(window.FB.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'whispers'), { targetId: authData.did, author: authData.user, content: text, ts: Date.now(), type: 'player' });
                 setIsAction(false);
             };
 
-            if (view === 'LOADING') return (
-                <div className="h-screen bg-black flex flex-col items-center justify-center">
-                    <div className="w-16 h-16 border-t-2 border-indigo-500 rounded-full animate-spin mb-4"></div>
-                    <div className="font-black text-indigo-900 tracking-[1em] uppercase animate-pulse">Establishing...</div>
-                </div>
-            );
+            if (view === 'LOADING') return <div className="h-screen bg-black flex items-center justify-center font-black text-indigo-900 tracking-[1em] uppercase animate-pulse">Establishing...</div>;
 
             return (
                 <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-[#020205] relative select-none">
                     {view === 'LOGIN' && (
                         <div className="w-full max-w-sm glass rounded-[3rem] p-12 space-y-10 animate-in zoom-in shadow-2xl">
                             <div className="text-center italic font-black text-3xl uppercase tracking-tighter text-white">祭坛降临</div>
-                            <div className="space-y-5">
-                                <div className="space-y-4">
-                                    <input type="text" id="un" className="w-full bg-black/60 border border-white/5 rounded-2xl px-6 py-5 text-white outline-none focus:border-indigo-500 transition-all text-base" placeholder="凡人之名" />
-                                    <input type="password" id="pw" className="w-full bg-black/60 border border-white/5 rounded-2xl px-6 py-5 text-white outline-none focus:border-indigo-500 transition-all text-base" placeholder="契约密钥" />
-                                </div>
-                                {error && <div className="text-center space-y-1"><p className="text-[10px] text-rose-500 font-bold uppercase tracking-widest">{error}</p><p className="text-[7px] text-zinc-600 italic">请检查控制台是否开启网关且参数匹配</p></div>}
-                                <button onClick={() => handleLogin(document.getElementById('un').value, document.getElementById('pw').value)} disabled={isAction} className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black uppercase italic shadow-lg active:scale-95 transition-all">
-                                    {isAction ? "对齐维度..." : "开启祭坛"}
-                                </button>
+                            <div className="space-y-4">
+                                <input type="text" id="un" className="w-full bg-black/40 border border-white/5 rounded-2xl px-6 py-5 text-white outline-none focus:border-indigo-500 transition-all text-base" placeholder="凡人之名" />
+                                <input type="password" id="pw" className="w-full bg-black/40 border border-white/5 rounded-2xl px-6 py-5 text-white outline-none focus:border-indigo-500 transition-all text-base" placeholder="契约密钥" />
+                                {error && <p className="text-[10px] text-rose-500 text-center font-bold uppercase">{error}</p>}
+                                <button onClick={() => handleLogin(document.getElementById('un').value, document.getElementById('pw').value)} disabled={isAction} className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black uppercase italic shadow-lg active:scale-95 transition-all">开启祭坛</button>
                             </div>
                         </div>
                     )}
                     {view === 'BIND' && (
-                        <div className="w-full max-w-sm glass rounded-[3rem] p-12 space-y-10 animate-in slide-in-from-bottom-8 text-center text-white">
+                        <div className="w-full max-w-sm glass rounded-[3rem] p-10 space-y-10 text-center text-white animate-in slide-in-from-bottom-8">
                             <h2 className="text-2xl font-black italic uppercase">身份锁定</h2>
-                            <p className="text-[10px] text-zinc-500 italic opacity-60">Input Discord Username for Sync</p>
                             <div className="space-y-4">
                                 <input type="text" id="did" className="w-full bg-black/40 border border-white/5 rounded-2xl px-6 py-5 text-white text-center font-bold tracking-widest outline-none focus:border-indigo-500" placeholder="Discord Username" />
-                                <button onClick={() => handleBind(document.getElementById('did').value)} disabled={isAction} className="w-full py-5 bg-purple-600 text-white rounded-2xl font-black uppercase shadow-lg">确定灵魂契约</button>
+                                <button onClick={() => handleBind(document.getElementById('did').value)} disabled={isAction} className="w-full py-5 bg-purple-600 text-white rounded-2xl font-black uppercase shadow-lg">确定契约</button>
                             </div>
                         </div>
                     )}
                     {view === 'CHAT' && (
                         <div className="w-full max-w-4xl h-[95vh] flex flex-col animate-in fade-in">
-                            <div className="flex items-center gap-4 mb-6 px-4">
-                                <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg nyar-glow text-white italic font-black text-xl">N</div>
-                                <h1 className="text-xl font-black italic uppercase text-white tracking-tighter">虚空真理祭坛</h1>
+                            <div className="flex items-center gap-4 mb-6 px-2">
+                                <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg text-white italic font-black text-xl">N</div>
+                                <h1 className="text-xl font-black italic uppercase text-white leading-none">虚空真理祭坛</h1>
                             </div>
-                            <div ref={scrollRef} className="flex-1 glass rounded-[3.5rem] p-6 lg:p-10 overflow-y-auto mb-6 space-y-8 custom-scrollbar shadow-2xl">
-                                {messages.length === 0 && <div className="h-full flex flex-col items-center justify-center opacity-10 text-xs font-black tracking-[1em] uppercase italic">The Void is Silent</div>}
+                            <div ref={scrollRef} className="flex-1 glass rounded-[3.5rem] p-6 lg:p-10 overflow-y-auto mb-10 space-y-8 custom-scrollbar shadow-2xl">
                                 {messages.map((m, i) => (
                                     <div key={i} className={`flex flex-col gap-2 ${m.type === 'bot' ? 'items-start' : 'items-end'}`}>
                                         <div className={`px-7 py-5 rounded-[2.5rem] text-sm leading-relaxed max-w-[90%] border shadow-xl ${m.type === 'bot' ? 'bg-indigo-900/15 border-indigo-500/20 text-indigo-100 italic' : 'bg-white/5 border-white/5 text-zinc-300'}`}>{m.content}</div>
                                     </div>
                                 ))}
                             </div>
-                            <div className="relative group px-2">
+                            <div className="relative group">
                                 <input type="text" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendMessage()} className="w-full bg-white/[0.03] border border-white/10 rounded-full px-12 py-7 pr-32 outline-none focus:border-indigo-500 text-white text-base shadow-2xl transition-all" placeholder="在此低语..." />
-                                <button onClick={sendMessage} className="absolute right-6 top-3 px-10 py-4 bg-indigo-600 text-white rounded-full font-black uppercase italic text-sm active:scale-95 shadow-lg">发送</button>
+                                <button onClick={sendMessage} className="absolute right-4 top-3 px-10 py-4 bg-indigo-600 text-white rounded-full font-black uppercase italic text-sm active:scale-95 shadow-lg">发送</button>
                             </div>
                         </div>
                     )}
