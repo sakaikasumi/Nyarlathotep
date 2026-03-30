@@ -24,8 +24,8 @@
     <div id="root"></div>
     <script type="module">
         // -------------------------------------------------------------------
-        // 深渊契约：在此粘贴控制台金色按钮复制的参数
-        const MANUALLY_CONFIG = {"firebase":{"apiKey":"AIzaSyCqyCcs2R2e7AegGjvFAwG98wlamtbHvZY","authDomain":"bard-frontend.firebaseapp.com","projectId":"bard-frontend","storageBucket":"bard-frontend.firebasestorage.app","messagingSenderId":"175205271074","appId":"1:175205271074:web:2b7bd4d34d33bf38e6ec7b"},"appId":"c_10c0940001eb442e_nyar_kp_admin_v120.jsx-503"};
+        // V121 永久互通协议：Firebase 配置已物理固定
+        const FB_CONFIG = {"apiKey":"AIzaSyCqyCcs2R2e7AegGjvFAwG98wlamtbHvZY","authDomain":"bard-frontend.firebaseapp.com","projectId":"bard-frontend","storageBucket":"bard-frontend.firebasestorage.app","messagingSenderId":"175205271074","appId":"1:175205271074:web:2b7bd4d34d33bf38e6ec7b"};
         // -------------------------------------------------------------------
 
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -34,21 +34,22 @@
 
         window.FB = { doc, setDoc, getDoc, collection, query, onSnapshot, addDoc, where, updateDoc, signInAnonymously, onAuthStateChanged };
 
-        if (MANUALLY_CONFIG && MANUALLY_CONFIG.firebase) {
-            try {
-                const app = initializeApp(MANUALLY_CONFIG.firebase);
-                window.db = getFirestore(app);
-                window.auth = getAuth(app);
-                window.appId = MANUALLY_CONFIG.appId;
-                window.isConfiged = true;
-                console.log("Aligned with Dimension ID:", window.appId);
-            } catch(e) { console.error("Dimension Lock Fail"); }
-        } else if (typeof __firebase_config !== 'undefined') {
-            const app = initializeApp(JSON.parse(__firebase_config));
+        // 核心逻辑：从网址参数 (?id=xxx) 中自动提取当前的 appId
+        const urlParams = new URLSearchParams(window.location.search);
+        const dynamicId = urlParams.get('id');
+
+        // 只有当控制台通过 URL 传递了 ID 或者我们在开发环境时才启动
+        const finalAppId = dynamicId || (typeof __app_id !== 'undefined' ? __app_id : null);
+
+        if (finalAppId) {
+            const app = initializeApp(FB_CONFIG);
             window.db = getFirestore(app);
             window.auth = getAuth(app);
-            window.appId = typeof __app_id !== 'undefined' ? __app_id : 'dev';
-            window.isConfiged = true;
+            window.appId = finalAppId;
+            window.ready = true;
+            console.log("Aligned with Dimension ID:", window.appId);
+        } else {
+            window.ready = false;
         }
     </script>
 
@@ -62,20 +63,19 @@
             const [input, setInput] = useState('');
             const [isAction, setIsAction] = useState(false);
             const [error, setError] = useState('');
-            const [loadText, setLoadText] = useState('對齐维度中...');
             const scrollRef = useRef(null);
 
             useEffect(() => {
                 const check = setInterval(() => {
-                    if (window.isConfiged && window.auth) {
+                    if (window.ready && window.auth) {
                         clearInterval(check);
                         window.FB.onAuthStateChanged(window.auth, (u) => {
                             if (u) setView('LOGIN');
-                            else {
-                                setLoadText('正在建立深渊连接...');
-                                window.FB.signInAnonymously(window.auth).catch(e => setError(`Denied (${e.code})`));
-                            }
+                            else window.FB.signInAnonymously(window.auth).catch(e => setError(`权限遭拒 (${e.code})`));
                         });
+                    } else if (window.ready === false) {
+                        clearInterval(check);
+                        setError("请通过控制台生成的专属链接进入。");
                     }
                 }, 1000);
                 return () => clearInterval(check);
@@ -102,13 +102,13 @@
                         if (snap.data().password === pw) {
                             setAuthData({ user: un, did: snap.data().discordId });
                             setView(snap.data().discordId ? 'CHAT' : 'BIND');
-                        } else setError("灵魂密钥错误。");
+                        } else setError("密钥不匹配。");
                     } else {
                         await window.FB.setDoc(userRef, { password: pw, discordId: null, online: true, ts: Date.now() });
                         setAuthData({ user: un, did: null });
                         setView('BIND');
                     }
-                } catch (e) { setError(`连接受阻 (${e.code})`); }
+                } catch (e) { setError(`连接异常 (${e.code})`); }
                 setIsAction(false);
             };
 
@@ -132,7 +132,8 @@
             if (view === 'LOADING') return (
                 <div className="h-screen bg-black flex flex-col items-center justify-center space-y-6">
                     <div className="loading-spinner scale-150"></div>
-                    <div className="text-indigo-900 font-black tracking-[1em] uppercase animate-pulse italic">{loadText}</div>
+                    <div className="text-indigo-900 font-black tracking-[1em] uppercase animate-pulse italic">Establishing...</div>
+                    {error && <p className="text-[10px] text-rose-500/50 uppercase max-w-xs text-center">{error}</p>}
                 </div>
             );
 
@@ -142,11 +143,11 @@
                         <div className="w-full max-w-sm glass rounded-[3rem] p-12 space-y-10 animate-in zoom-in shadow-2xl">
                             <div className="text-center italic font-black text-3xl uppercase tracking-tighter text-white">祭坛降临</div>
                             <div className="space-y-4">
-                                <input type="text" id="un" className="w-full bg-black/40 border border-white/5 rounded-2xl px-6 py-5 text-white outline-none focus:border-indigo-500 transition-all text-base shadow-inner" placeholder="凡人之名" />
-                                <input type="password" id="pw" className="w-full bg-black/40 border border-white/5 rounded-2xl px-6 py-5 text-white outline-none focus:border-indigo-500 transition-all text-base shadow-inner" placeholder="契约密钥" />
+                                <input type="text" id="un" className="w-full bg-black/40 border border-white/5 rounded-2xl px-6 py-5 text-white outline-none focus:border-indigo-500 transition-all text-base" placeholder="凡人之名" />
+                                <input type="password" id="pw" className="w-full bg-black/40 border border-white/5 rounded-2xl px-6 py-5 text-white outline-none focus:border-indigo-500 transition-all text-base" placeholder="契约密钥" />
                                 {error && <p className="text-[10px] text-rose-500 text-center font-bold uppercase animate-bounce">{error}</p>}
                                 <button onClick={() => handleLogin(document.getElementById('un').value, document.getElementById('pw').value)} disabled={isAction} className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black uppercase italic shadow-lg active:scale-95 transition-all flex items-center justify-center gap-3">
-                                    {isAction ? <><div className="loading-spinner"></div> 正在降临...</> : "开启祭坛"}
+                                    {isAction ? <><div className="loading-spinner"></div> 正在对齐...</> : "开启祭坛"}
                                 </button>
                             </div>
                         </div>
@@ -156,14 +157,14 @@
                             <h2 className="text-2xl font-black italic uppercase">身份锁定</h2>
                             <div className="space-y-4">
                                 <input type="text" id="did" className="w-full bg-black/40 border border-white/5 rounded-2xl px-6 py-5 text-white text-center font-bold tracking-widest outline-none focus:border-indigo-500" placeholder="Discord Username" />
-                                <button onClick={() => handleBind(document.getElementById('did').value)} disabled={isAction} className="w-full py-5 bg-purple-600 text-white rounded-2xl font-black uppercase shadow-lg">确定契约</button>
+                                <button onClick={() => handleBind(document.getElementById('did').value)} disabled={isAction} className="w-full py-5 bg-purple-600 text-white rounded-2xl font-black uppercase shadow-lg active:scale-95">确定契约</button>
                             </div>
                         </div>
                     )}
                     {view === 'CHAT' && (
                         <div className="w-full max-w-4xl h-[95vh] flex flex-col animate-in fade-in">
                             <div className="flex items-center gap-4 mb-6 px-2">
-                                <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg nyar-glow text-white italic font-black text-xl">N</div>
+                                <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg nyar-glow text-white italic font-black text-xl text-white">N</div>
                                 <h1 className="text-xl font-black italic uppercase text-white leading-none">虚空真理祭坛</h1>
                             </div>
                             <div ref={scrollRef} className="flex-1 glass rounded-[3.5rem] p-6 lg:p-10 overflow-y-auto mb-10 space-y-8 custom-scrollbar shadow-2xl">
